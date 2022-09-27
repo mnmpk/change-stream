@@ -7,7 +7,6 @@ import java.util.concurrent.CompletableFuture;
 
 import org.bson.BsonDocument;
 import org.bson.BsonString;
-import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mongodb.client.ChangeStreamIterable;
-import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.InsertOneModel;
@@ -39,9 +37,6 @@ public class TestController {
 	@Autowired
 	private MongoTemplate mongoTemplate;
 
-	@Autowired
-	private MongoClient mongoClient;
-
 	@RequestMapping("/test/{collection}")
 	public String test(@PathVariable("collection") String collectionString,
 			@RequestParam(required = false, defaultValue = "10") int threads) {
@@ -54,6 +49,7 @@ public class TestController {
 				sw.start();
 				for (int i = 1; i <= threads; i++) {
 					ends.add(insert(i, collectionString));
+					//ends.add(insertOne(i, collectionString));
 				}
 				CompletableFuture.allOf(ends.toArray(new CompletableFuture[ends.size()])).join();
 				sw.stop();
@@ -81,8 +77,37 @@ public class TestController {
 			bulkOperations.add(new InsertOneModel<>(doc));
 		}
 		var sw = new StopWatch();
+		logger.info("start bulk write");
 		sw.start();
 		mongoTemplate.getCollection(collection).bulkWrite(bulkOperations);
+		sw.stop();
+		var sb = new StringBuilder();
+		sb.append(Thread.currentThread().getName());
+		sb.append(" takes ");
+		sb.append(sw.getTotalTimeSeconds());
+		sb.append("s");
+
+		logger.info(sb.toString());
+
+		return CompletableFuture.completedFuture(null);
+	}
+	@Async
+	public CompletableFuture<Void> insertOne(int index, String collection) throws InterruptedException {
+		logger.info(Thread.currentThread().getName() + " start at: " + LocalDateTime.now().toString());
+		//var bulkOperations = new ArrayList<WriteModel<Document>>();
+		var c = mongoTemplate.getCollection(collection);
+		var sw = new StopWatch();
+		sw.start();
+		for (int i = 0; i < 10; i++) {
+			var sw2 = new StopWatch();
+		sw2.start();
+			Document doc = new Document();
+			doc.put("i", index + "-" + i);
+			doc.put("t", new Date());
+			c.insertOne(doc);
+			logger.info("insert takes"+sw.getTotalTimeSeconds()+"s");
+		}
+		//logger.info("start bulk write");
 		sw.stop();
 		var sb = new StringBuilder();
 		sb.append(Thread.currentThread().getName());
@@ -125,7 +150,6 @@ public class TestController {
 					} else {
 						logger.info("Start watching " + db.getName() + "." + collectionString);
 						changeStream = collection.watch();
-						collection.watch().startAtOperationTime(new BsonTimestamp(1664299728));
 					}
 				} else {
 					if (resumeTokenString != null) {
@@ -141,9 +165,9 @@ public class TestController {
 				if (fullDocument) {
 					changeStream = changeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
 				}
+				changeStream.batchSize(100);
 				changeStream.forEach(event -> {
-					logger.info("resume token:" + event.getResumeToken().toJson());
-					logger.info(event.getOperationType().getValue() + " operation");
+					logger.info(event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
 					Document doc = null;
 					switch (event.getOperationType()) {
 						case INSERT:
