@@ -7,6 +7,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.bson.BsonDocument;
 import org.bson.BsonString;
+import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,12 +21,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.mongodb.client.ChangeStreamIterable;
+import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.InsertOneModel;
 import com.mongodb.client.model.WriteModel;
-import com.mongodb.client.model.changestream.ChangeStreamDocument;
+import com.mongodb.client.model.changestream.FullDocument;
 
 import lombok.var;
 
@@ -36,6 +38,9 @@ public class TestController {
 
 	@Autowired
 	private MongoTemplate mongoTemplate;
+
+	@Autowired
+	private MongoClient mongoClient;
 
 	@RequestMapping("/test/{collection}")
 	public String test(@PathVariable("collection") String collectionString,
@@ -92,60 +97,71 @@ public class TestController {
 
 	@RequestMapping("/watch")
 	public void watch() {
-		watch(null, null);
+		watch(null, null, false);
 	}
 
 	@RequestMapping("/watch/{collection}")
-	public void watch(@PathVariable("collection") String collection) {
-		watch(null, collection);
+	public void watch(@PathVariable("collection") String collection,
+			@RequestParam(required = false, defaultValue = "false") boolean fullDocument) {
+		watch(null, collection, fullDocument);
 	}
 
 	@RequestMapping("/watch/{resumeToken}/{collection}")
 	public void watch(@PathVariable("resumeToken") String resumeTokenString,
-			@PathVariable("collection") String collectionString) {
+			@PathVariable("collection") String collectionString,
+			@RequestParam(required = false, defaultValue = "false") boolean fullDocument) {
 		CompletableFuture.runAsync(new Runnable() {
 			@Override
 			public void run() {
 				MongoDatabase db = mongoTemplate.getDb();
-				MongoCursor<ChangeStreamDocument<Document>> cursor = null;
+				ChangeStreamIterable<Document> changeStream = null;
 				if (StringUtils.hasText(collectionString)) {
 					MongoCollection<Document> collection = mongoTemplate.getCollection(collectionString);
 					if (resumeTokenString != null) {
 						logger.info(db.getName() + "." + collectionString + " resume after: " + resumeTokenString);
 						BsonDocument resumeToken = new BsonDocument();
 						resumeToken.put("_data", new BsonString(resumeTokenString));
-						cursor = collection.watch().resumeAfter(resumeToken).iterator();
+						changeStream = collection.watch().resumeAfter(resumeToken);
 					} else {
 						logger.info("Start watching " + db.getName() + "." + collectionString);
-						cursor = collection.watch().iterator();
+						changeStream = collection.watch();
+						collection.watch().startAtOperationTime(new BsonTimestamp(1664299728));
 					}
 				} else {
 					if (resumeTokenString != null) {
 						logger.info(db.getName() + " resume after: " + resumeTokenString);
 						BsonDocument resumeToken = new BsonDocument();
 						resumeToken.put("_data", new BsonString(resumeTokenString));
-						cursor = db.watch().resumeAfter(resumeToken).iterator();
+						changeStream = db.watch().resumeAfter(resumeToken);
 					} else {
 						logger.info("Start watching " + db.getName());
-						cursor = db.watch().iterator();
+						changeStream = db.watch();
 					}
 				}
-				while (cursor.hasNext()) {
-					ChangeStreamDocument<Document> csd = cursor.next();
-					logger.info("resume token:" + csd.getResumeToken().toJson());
-					logger.info(csd.getOperationType().getValue() + " operation");
-					switch (csd.getOperationType()) {
+				if (fullDocument) {
+					changeStream = changeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
+				}
+				changeStream.forEach(event -> {
+					logger.info("resume token:" + event.getResumeToken().toJson());
+					logger.info(event.getOperationType().getValue() + " operation");
+					Document doc = null;
+					switch (event.getOperationType()) {
 						case INSERT:
-							logger.info(csd.getFullDocument().toJson());
-							logger.info("Diff: "+(new Date().getTime()-csd.getFullDocument().getDate("t").getTime()+"ms"));
+							doc = event.getFullDocument();
+							logger.info(doc.toJson());
+							logger.info("Diff: " + (new Date().getTime() - doc.getDate("t").getTime() + "ms"));
 							break;
 						case UPDATE:
-							logger.info(csd.getUpdateDescription().toString());
+							if (fullDocument) {
+								doc = event.getFullDocument();
+								logger.info(doc.toJson());
+							}
+							logger.info(event.getUpdateDescription().toString());
 							break;
 						default:
 							break;
 					}
-				}
+				});
 			}
 		});
 	}
