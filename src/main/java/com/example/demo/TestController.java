@@ -39,7 +39,8 @@ public class TestController {
 
 	@RequestMapping("/test/{collection}")
 	public String test(@PathVariable("collection") String collectionString,
-			@RequestParam(required = false, defaultValue = "10") int threads) {
+	@RequestParam(required = false, defaultValue = "5") int threads,
+	@RequestParam(required = false, defaultValue = "1000") int itemsPerThread) {
 		{
 			try {
 				logger.info("test start");
@@ -47,12 +48,21 @@ public class TestController {
 				var ends = new ArrayList<CompletableFuture<Void>>();
 				var sw = new StopWatch();
 				sw.start();
+				Document doc = new Document();
+				doc.put("i", "start");
+				doc.put("t", new Date());
+				mongoTemplate.getCollection(collectionString).insertOne(doc);
 				for (int i = 1; i <= threads; i++) {
-					ends.add(insert(i, collectionString));
+					ends.add(insert(itemsPerThread, i, collectionString));
 					//ends.add(insertOne(i, collectionString));
 				}
 				CompletableFuture.allOf(ends.toArray(new CompletableFuture[ends.size()])).join();
 				sw.stop();
+				doc = new Document();
+				doc.put("i", "end");
+				doc.put("c", threads*itemsPerThread);
+				doc.put("t", new Date());
+				mongoTemplate.getCollection(collectionString).insertOne(doc);
 
 				var sb = new StringBuilder();
 				sb.append("test() takes ");
@@ -67,10 +77,10 @@ public class TestController {
 	}
 
 	@Async
-	public CompletableFuture<Void> insert(int index, String collection) throws InterruptedException {
+	public CompletableFuture<Void> insert(int itemsPerThread, int index, String collection) throws InterruptedException {
 		logger.info(Thread.currentThread().getName() + " start at: " + LocalDateTime.now().toString());
 		var bulkOperations = new ArrayList<WriteModel<Document>>();
-		for (int i = 0; i < 100; i++) {
+		for (int i = 0; i < itemsPerThread; i++) {
 			Document doc = new Document();
 			doc.put("i", index + "-" + i);
 			doc.put("t", new Date());
@@ -166,6 +176,7 @@ public class TestController {
 					changeStream = changeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
 				}
 				changeStream.batchSize(100);
+				var sw = new StopWatch();
 				changeStream.forEach(event -> {
 					logger.info(event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
 					Document doc = null;
@@ -174,6 +185,13 @@ public class TestController {
 							doc = event.getFullDocument();
 							logger.info(doc.toJson());
 							logger.info("Diff: " + (new Date().getTime() - doc.getDate("t").getTime() + "ms"));
+							if("start".equalsIgnoreCase(doc.getString("i"))){
+								sw.start();
+							}else if("end".equalsIgnoreCase(doc.getString("i"))){
+								sw.stop();
+								int count = doc.getInteger("c");
+								logger.info("No. of record inserted: "+count+" takes "+sw.getTotalTimeSeconds()+"s, TPS:"+count/sw.getTotalTimeSeconds());
+							}
 							break;
 						case UPDATE:
 							if (fullDocument) {
