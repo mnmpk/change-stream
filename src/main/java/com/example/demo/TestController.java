@@ -143,7 +143,7 @@ public class TestController {
 						if(event==null)
 							continue;
 						logger.info(event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
-						/*RawBsonDocument doc = null;
+						RawBsonDocument doc = null;
 						switch (event.getOperationType()) {
 							case INSERT:
 								doc = event.getFullDocument();
@@ -166,7 +166,7 @@ public class TestController {
 								break;
 							default:
 								break;
-						}*/
+						}
 					}
 				}
 				
