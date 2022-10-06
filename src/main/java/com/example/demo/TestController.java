@@ -1,18 +1,26 @@
 package com.example.demo;
 
-import java.time.LocalDateTime;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
+import org.bson.BsonBinaryReader;
+import org.bson.BsonDateTime;
 import org.bson.BsonDocument;
 import org.bson.BsonString;
+import org.bson.BsonType;
 import org.bson.Document;
+import org.bson.RawBsonDocument;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.util.StopWatch;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,10 +29,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mongodb.client.ChangeStreamIterable;
+import com.mongodb.client.MongoChangeStreamCursor;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.model.InsertOneModel;
-import com.mongodb.client.model.WriteModel;
+import com.mongodb.client.model.changestream.ChangeStreamDocument;
 import com.mongodb.client.model.changestream.FullDocument;
 
 import lombok.var;
@@ -33,9 +41,12 @@ import lombok.var;
 public class TestController {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
-
 	@Autowired
 	private MongoTemplate mongoTemplate;
+	@Autowired
+	private AsyncService service;
+	
+	private ArrayBlockingQueue<BsonDocument> queue;
 
 	@RequestMapping("/test/{collection}")
 	public String test(@PathVariable("collection") String collectionString,
@@ -50,10 +61,10 @@ public class TestController {
 				sw.start();
 				Document doc = new Document();
 				doc.put("i", "start");
-				doc.put("t", new Date());
+				doc.put("t", new BsonDateTime(new Date().getTime()));
 				mongoTemplate.getCollection(collectionString).insertOne(doc);
 				for (int i = 1; i <= threads; i++) {
-					ends.add(insert(itemsPerThread, i, collectionString));
+					ends.add(service.insert(itemsPerThread, i, collectionString));
 					//ends.add(insertOne(i, collectionString));
 				}
 				CompletableFuture.allOf(ends.toArray(new CompletableFuture[ends.size()])).join();
@@ -76,59 +87,6 @@ public class TestController {
 		}
 	}
 
-	@Async
-	public CompletableFuture<Void> insert(int itemsPerThread, int index, String collection) throws InterruptedException {
-		logger.info(Thread.currentThread().getName() + " start at: " + LocalDateTime.now().toString());
-		var bulkOperations = new ArrayList<WriteModel<Document>>();
-		for (int i = 0; i < itemsPerThread; i++) {
-			Document doc = new Document();
-			doc.put("i", index + "-" + i);
-			doc.put("t", new Date());
-			bulkOperations.add(new InsertOneModel<>(doc));
-		}
-		var sw = new StopWatch();
-		logger.info("start bulk write");
-		sw.start();
-		mongoTemplate.getCollection(collection).bulkWrite(bulkOperations);
-		sw.stop();
-		var sb = new StringBuilder();
-		sb.append(Thread.currentThread().getName());
-		sb.append(" takes ");
-		sb.append(sw.getTotalTimeSeconds());
-		sb.append("s");
-
-		logger.info(sb.toString());
-
-		return CompletableFuture.completedFuture(null);
-	}
-	@Async
-	public CompletableFuture<Void> insertOne(int index, String collection) throws InterruptedException {
-		logger.info(Thread.currentThread().getName() + " start at: " + LocalDateTime.now().toString());
-		//var bulkOperations = new ArrayList<WriteModel<Document>>();
-		var c = mongoTemplate.getCollection(collection);
-		var sw = new StopWatch();
-		sw.start();
-		for (int i = 0; i < 10; i++) {
-			var sw2 = new StopWatch();
-		sw2.start();
-			Document doc = new Document();
-			doc.put("i", index + "-" + i);
-			doc.put("t", new Date());
-			c.insertOne(doc);
-			logger.info("insert takes"+sw.getTotalTimeSeconds()+"s");
-		}
-		//logger.info("start bulk write");
-		sw.stop();
-		var sb = new StringBuilder();
-		sb.append(Thread.currentThread().getName());
-		sb.append(" takes ");
-		sb.append(sw.getTotalTimeSeconds());
-		sb.append("s");
-
-		logger.info(sb.toString());
-
-		return CompletableFuture.completedFuture(null);
-	}
 
 	@RequestMapping("/watch")
 	public void watch() {
@@ -145,13 +103,14 @@ public class TestController {
 	public void watch(@PathVariable("resumeToken") String resumeTokenString,
 			@PathVariable("collection") String collectionString,
 			@RequestParam(required = false, defaultValue = "false") boolean fullDocument) {
+
 		CompletableFuture.runAsync(new Runnable() {
 			@Override
 			public void run() {
 				MongoDatabase db = mongoTemplate.getDb();
-				ChangeStreamIterable<Document> changeStream = null;
+				ChangeStreamIterable<RawBsonDocument> changeStream = null;
 				if (StringUtils.hasText(collectionString)) {
-					MongoCollection<Document> collection = mongoTemplate.getCollection(collectionString);
+					MongoCollection<RawBsonDocument> collection = db.getCollection(collectionString, RawBsonDocument.class);
 					if (resumeTokenString != null) {
 						logger.info(db.getName() + "." + collectionString + " resume after: " + resumeTokenString);
 						BsonDocument resumeToken = new BsonDocument();
@@ -166,30 +125,64 @@ public class TestController {
 						logger.info(db.getName() + " resume after: " + resumeTokenString);
 						BsonDocument resumeToken = new BsonDocument();
 						resumeToken.put("_data", new BsonString(resumeTokenString));
-						changeStream = db.watch().resumeAfter(resumeToken);
+						changeStream = db.watch(RawBsonDocument.class).resumeAfter(resumeToken);
 					} else {
 						logger.info("Start watching " + db.getName());
-						changeStream = db.watch();
+						changeStream = db.watch(RawBsonDocument.class);
 					}
 				}
 				if (fullDocument) {
 					changeStream = changeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
 				}
-				changeStream.batchSize(100);
+				changeStream.batchSize(500).maxAwaitTime(500, TimeUnit.MILLISECONDS);
 				var sw = new StopWatch();
-				changeStream.forEach(event -> {
+				
+				try (MongoChangeStreamCursor<ChangeStreamDocument<RawBsonDocument>> cursor = changeStream.cursor()) {
+					while (true) {
+						ChangeStreamDocument<RawBsonDocument> event = cursor.tryNext();
+						if(event==null)
+							continue;
+						logger.info(event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
+						/*RawBsonDocument doc = null;
+						switch (event.getOperationType()) {
+							case INSERT:
+								doc = event.getFullDocument();
+								logger.info(doc.toJson());
+								logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
+								if("start".equalsIgnoreCase(doc.getString("i").getValue())){
+									sw.start();
+								}else if("end".equalsIgnoreCase(doc.getString("i").getValue())){
+									sw.stop();
+									int count = doc.getInt32("c").getValue();
+									logger.info("No. of record inserted: "+count+" takes "+sw.getTotalTimeSeconds()+"s, TPS:"+count/sw.getTotalTimeSeconds());
+								}
+								break;
+							case UPDATE:
+								if (fullDocument) {
+									doc = event.getFullDocument();
+									logger.info(doc.toJson());
+								}
+								logger.info(event.getUpdateDescription().toString());
+								break;
+							default:
+								break;
+						}*/
+					}
+				}
+				
+				/* changeStream.forEach(event -> {
 					logger.info(event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
-					Document doc = null;
+					RawBsonDocument doc = null;
 					switch (event.getOperationType()) {
 						case INSERT:
 							doc = event.getFullDocument();
 							logger.info(doc.toJson());
-							logger.info("Diff: " + (new Date().getTime() - doc.getDate("t").getTime() + "ms"));
-							if("start".equalsIgnoreCase(doc.getString("i"))){
+							logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
+							if("start".equalsIgnoreCase(doc.getString("i").getValue())){
 								sw.start();
-							}else if("end".equalsIgnoreCase(doc.getString("i"))){
+							}else if("end".equalsIgnoreCase(doc.getString("i").getValue())){
 								sw.stop();
-								int count = doc.getInteger("c");
+								int count = doc.getInt32("c").getValue();
 								logger.info("No. of record inserted: "+count+" takes "+sw.getTotalTimeSeconds()+"s, TPS:"+count/sw.getTotalTimeSeconds());
 							}
 							break;
@@ -203,9 +196,8 @@ public class TestController {
 						default:
 							break;
 					}
-				});
+				});*/
 			}
 		});
 	}
-
 }
