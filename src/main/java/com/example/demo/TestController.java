@@ -39,7 +39,7 @@ public class TestController {
 
 	@RequestMapping("/test/{collection}")
 	public String test(@PathVariable("collection") String collectionString,
-	@RequestParam(required = false, defaultValue = "5") int threads,
+	@RequestParam(required = false, defaultValue = "20") int threads,
 	@RequestParam(required = false, defaultValue = "1000") int itemsPerThread) {
 		{
 			try {
@@ -208,11 +208,4 @@ public class TestController {
 		});
 	}
 
-	/*
-	 * public void resumeChangeStream() {
-	 * watch("data",
-	 * "82632C7277000000012B022C0100296E5A10040A58660016784CB992272CF6D7A6326746645F69640064632C726CB4DDA2E86C2876DE0004"
-	 * );
-	 * }
-	 */
 }
