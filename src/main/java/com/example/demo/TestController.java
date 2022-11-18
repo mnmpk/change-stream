@@ -4,17 +4,12 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import org.bson.BsonBinaryReader;
 import org.bson.BsonDateTime;
 import org.bson.BsonDocument;
 import org.bson.BsonString;
-import org.bson.BsonType;
 import org.bson.Document;
 import org.bson.RawBsonDocument;
 import org.slf4j.Logger;
@@ -31,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mongodb.client.ChangeStreamIterable;
 import com.mongodb.client.MongoChangeStreamCursor;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
 import com.mongodb.client.model.changestream.FullDocument;
@@ -45,9 +41,9 @@ public class TestController {
 	private MongoTemplate mongoTemplate;
 	@Autowired
 	private AsyncService service;
+	private int batchSize = 10000;
+	private int maxAwaitTime = 10000;
 	
-	private ArrayBlockingQueue<BsonDocument> queue;
-
 	@RequestMapping("/test/{collection}")
 	public String test(@PathVariable("collection") String collectionString,
 	@RequestParam(required = false, defaultValue = "20") int threads,
@@ -88,6 +84,86 @@ public class TestController {
 	}
 
 
+	@RequestMapping("/watch-cursor")
+	public void watchCursor() {
+		watch(null, null, false);
+	}
+
+	@RequestMapping("/watch-cursor/{collection}")
+	public void watchCursor(@PathVariable("collection") String collection,
+			@RequestParam(required = false, defaultValue = "false") boolean fullDocument) {
+		watch(null, collection, fullDocument);
+	}
+
+	@RequestMapping("/watch-cursor/{resumeToken}/{collection}")
+	public void watchCursor(@PathVariable("resumeToken") String resumeTokenString,
+			@PathVariable("collection") String collectionString,
+			@RequestParam(required = false, defaultValue = "false") boolean fullDocument) {
+
+		CompletableFuture.runAsync(new Runnable() {
+			@Override
+			public void run() {
+				MongoDatabase db = mongoTemplate.getDb();
+				ChangeStreamIterable<RawBsonDocument> changeStream = null;
+				if (StringUtils.hasText(collectionString)) {
+					MongoCollection<RawBsonDocument> collection = db.getCollection(collectionString, RawBsonDocument.class);
+					if (resumeTokenString != null) {
+						logger.info(db.getName() + "." + collectionString + " resume after: " + resumeTokenString);
+						BsonDocument resumeToken = new BsonDocument();
+						resumeToken.put("_data", new BsonString(resumeTokenString));
+						changeStream = collection.watch().resumeAfter(resumeToken);
+					} else {
+						logger.info("Start watching " + db.getName() + "." + collectionString);
+						changeStream = collection.watch();
+					}
+				} else {
+					if (resumeTokenString != null) {
+						logger.info(db.getName() + " resume after: " + resumeTokenString);
+						BsonDocument resumeToken = new BsonDocument();
+						resumeToken.put("_data", new BsonString(resumeTokenString));
+						changeStream = db.watch(RawBsonDocument.class).resumeAfter(resumeToken);
+					} else {
+						logger.info("Start watching " + db.getName());
+						changeStream = db.watch(RawBsonDocument.class);
+					}
+				}
+				if (fullDocument) {
+					changeStream = changeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
+				}
+				changeStream.batchSize(batchSize).maxAwaitTime(maxAwaitTime, TimeUnit.MILLISECONDS);
+				var sw = new StopWatch();
+				
+				
+				changeStream.forEach(event -> {
+					logger.info(event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
+					RawBsonDocument doc = null;
+					switch (event.getOperationType()) {
+						case INSERT:
+							doc = event.getFullDocument();
+							//logger.info(doc.toJson());
+							//logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
+							if("start".equalsIgnoreCase(doc.getString("i").getValue())){
+								sw.start();
+							}else if("end".equalsIgnoreCase(doc.getString("i").getValue())){
+								sw.stop();
+								int count = doc.getInt32("c").getValue();
+								logger.info("No. of record inserted: "+count+" takes "+sw.getTotalTimeSeconds()+"s, TPS:"+count/sw.getTotalTimeSeconds());
+							}
+							break;
+						case UPDATE:
+							if (fullDocument) {
+								doc = event.getFullDocument();
+								logger.info(doc.toJson());
+							}
+							logger.info(event.getUpdateDescription().toString());
+							break;
+						default:
+							break;
+					}
+				});
+			}
+		});
+	}
 	@RequestMapping("/watch")
 	public void watch() {
 		watch(null, null, false);
@@ -98,7 +174,6 @@ public class TestController {
 			@RequestParam(required = false, defaultValue = "false") boolean fullDocument) {
 		watch(null, collection, fullDocument);
 	}
-
 	@RequestMapping("/watch/{resumeToken}/{collection}")
 	public void watch(@PathVariable("resumeToken") String resumeTokenString,
 			@PathVariable("collection") String collectionString,
@@ -134,8 +209,11 @@ public class TestController {
 				if (fullDocument) {
 					changeStream = changeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
 				}
-				changeStream.batchSize(500).maxAwaitTime(500, TimeUnit.MILLISECONDS);
+				changeStream.batchSize(batchSize).maxAwaitTime(maxAwaitTime, TimeUnit.MILLISECONDS);
 				var sw = new StopWatch();
+				MongoCursor<ChangeStreamDocument<RawBsonDocument>> a = changeStream.iterator();
+				
+				MongoChangeStreamCursor<ChangeStreamDocument<RawBsonDocument>> b = changeStream.cursor();
 				
 				try (MongoChangeStreamCursor<ChangeStreamDocument<RawBsonDocument>> cursor = changeStream.cursor()) {
 					while (true) {
@@ -147,8 +225,8 @@ public class TestController {
 						switch (event.getOperationType()) {
 							case INSERT:
 								doc = event.getFullDocument();
-								logger.info(doc.toJson());
-								logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
+								//logger.info(doc.toJson());
+								//logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
 								if("start".equalsIgnoreCase(doc.getString("i").getValue())){
 									sw.start();
 								}else if("end".equalsIgnoreCase(doc.getString("i").getValue())){
@@ -169,34 +247,6 @@ public class TestController {
 						}
 					}
 				}
-				
-				/* changeStream.forEach(event -> {
-					logger.info(event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
-					RawBsonDocument doc = null;
-					switch (event.getOperationType()) {
-						case INSERT:
-							doc = event.getFullDocument();
-							logger.info(doc.toJson());
-							logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
-							if("start".equalsIgnoreCase(doc.getString("i").getValue())){
-								sw.start();
-							}else if("end".equalsIgnoreCase(doc.getString("i").getValue())){
-								sw.stop();
-								int count = doc.getInt32("c").getValue();
-								logger.info("No. of record inserted: "+count+" takes "+sw.getTotalTimeSeconds()+"s, TPS:"+count/sw.getTotalTimeSeconds());
-							}
-							break;
-						case UPDATE:
-							if (fullDocument) {
-								doc = event.getFullDocument();
-								logger.info(doc.toJson());
-							}
-							logger.info(event.getUpdateDescription().toString());
-							break;
-						default:
-							break;
-					}
-				});*/
 			}
 		});
 	}

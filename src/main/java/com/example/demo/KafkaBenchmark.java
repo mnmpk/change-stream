@@ -58,10 +58,10 @@ public class KafkaBenchmark {
                         d = new Date();
                     } else if ("end".equalsIgnoreCase(fd.getString("i"))) {
                         double diff = (new Date().getTime() - d.getTime())/1000d;                        
-                        return "No. of record inserted: "+fd.getNumber("c").intValue()+" takes "+diff+"s, TPS:"+fd.getNumber("c").doubleValue()/diff;
+                        return "{\"msg\":\"No. of record inserted: "+fd.getNumber("c").intValue()+" takes "+diff+"s, TPS:"+fd.getNumber("c").doubleValue()/diff+"\"}";
                     }
                 }
-                return "Start recieving at " + d;
+                return "{\"msg\":\"Start recieving at " + d+"\"}";
             }
         });
 
