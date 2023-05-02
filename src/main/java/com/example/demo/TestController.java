@@ -41,8 +41,8 @@ public class TestController {
 	private MongoTemplate mongoTemplate;
 	@Autowired
 	private AsyncService service;
-	private int batchSize = 10000;
-	private int maxAwaitTime = 10000;
+	private int batchSize = 100000;
+	private int maxAwaitTime = 1000;
 	
 	@RequestMapping("/test/{collection}")
 	public String test(@PathVariable("collection") String collectionString,
@@ -131,10 +131,12 @@ public class TestController {
 					changeStream = changeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
 				}
 				changeStream.batchSize(batchSize).maxAwaitTime(maxAwaitTime, TimeUnit.MILLISECONDS);
+				
 				var sw = new StopWatch();
 				
 				
 				changeStream.forEach(event -> {
+					
 					logger.info(event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
 					RawBsonDocument doc = null;
 					switch (event.getOperationType()) {
@@ -183,6 +185,7 @@ public class TestController {
 			@Override
 			public void run() {
 				MongoDatabase db = mongoTemplate.getDb();
+				
 				ChangeStreamIterable<RawBsonDocument> changeStream = null;
 				if (StringUtils.hasText(collectionString)) {
 					MongoCollection<RawBsonDocument> collection = db.getCollection(collectionString, RawBsonDocument.class);
@@ -214,7 +217,7 @@ public class TestController {
 				MongoCursor<ChangeStreamDocument<RawBsonDocument>> a = changeStream.iterator();
 				
 				MongoChangeStreamCursor<ChangeStreamDocument<RawBsonDocument>> b = changeStream.cursor();
-				
+
 				try (MongoChangeStreamCursor<ChangeStreamDocument<RawBsonDocument>> cursor = changeStream.cursor()) {
 					while (true) {
 						ChangeStreamDocument<RawBsonDocument> event = cursor.tryNext();

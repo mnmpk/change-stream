@@ -17,12 +17,12 @@ import org.json.JSONObject;
 
 
 public class KafkaBenchmark {
-    public static final String INPUT_TOPIC = "change_stream.data";
+    public static final String INPUT_TOPIC = "change-stream.data";
     public static final String OUTPUT_TOPIC = "change_stream_result";
 
     static Properties getStreamsConfig(final String[] args) throws IOException {
         final Properties props = new Properties();
-        props.putIfAbsent(StreamsConfig.APPLICATION_ID_CONFIG, "change_stream");
+        props.putIfAbsent(StreamsConfig.APPLICATION_ID_CONFIG, "change-stream");
         props.putIfAbsent(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         props.putIfAbsent(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, 0);
         props.putIfAbsent(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
