@@ -41,7 +41,7 @@ public class TestController {
 	private MongoTemplate mongoTemplate;
 	@Autowired
 	private AsyncService service;
-	private int batchSize = 100000;
+	private int batchSize = 10;
 	private int maxAwaitTime = 1000;
 	
 	@RequestMapping("/test/{collection}")
@@ -217,6 +217,7 @@ public class TestController {
 				MongoCursor<ChangeStreamDocument<RawBsonDocument>> a = changeStream.iterator();
 				
 				MongoChangeStreamCursor<ChangeStreamDocument<RawBsonDocument>> b = changeStream.cursor();
+				
 
 				try (MongoChangeStreamCursor<ChangeStreamDocument<RawBsonDocument>> cursor = changeStream.cursor()) {
 					while (true) {
