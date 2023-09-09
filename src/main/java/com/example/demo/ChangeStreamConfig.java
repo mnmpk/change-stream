@@ -3,7 +3,6 @@ package com.example.demo;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import javax.annotation.PostConstruct;
 
 import org.bson.BsonDocument;
 import org.bson.BsonString;
@@ -35,12 +34,15 @@ import com.mongodb.client.model.ReplaceOptions;
 import com.mongodb.client.model.changestream.FullDocument;
 import com.mongodb.client.model.changestream.OperationType;
 
+import jakarta.annotation.PostConstruct;
+
 @Configuration
 public class ChangeStreamConfig {
 
     private final String COLL_CUSTOMER = "customer";
     private final String COLL_POLICY = "policy";
     private final String COLL_SEARCH = "search";
+    private final String COLL_TEST = "test";
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -61,6 +63,7 @@ public class ChangeStreamConfig {
         CompletableFuture.supplyAsync(() -> {
             logger.info("start consumer change stream");
             start();
+            startColl();
             return null;
         });
     }
@@ -124,5 +127,25 @@ public class ChangeStreamConfig {
     @Recover
     public void changeStreamException(ChangeStreamException e) {
         logger.error("Retry failure at: " + resumeTokenString);
+    }
+
+    @Retryable(include = ChangeStreamException.class, maxAttempts = 3, backoff = @Backoff(delay = 1000))
+    private void startColl() {
+        MongoCollection<Document> coll = mongoTemplate.getDb().getCollection(COLL_TEST);
+        ChangeStreamIterable<Document> changeStream = coll.watch().fullDocument(FullDocument.UPDATE_LOOKUP);
+        if (resumeTokenString != null) {
+            BsonDocument resumeToken = new BsonDocument();
+            resumeToken.put("_data", new BsonString(resumeTokenString));
+            changeStream.resumeAfter(resumeToken);
+        }
+        changeStream.forEach(e -> {
+            logger.info("update event received: " + e);
+            resumeTokenString = e.getResumeToken().getString("_data").toString();
+            if (OperationType.INVALIDATE == e.getOperationType()) {
+                throw new ChangeStreamException();
+            } else {
+                //do nothing
+            }
+        });
     }
 }
