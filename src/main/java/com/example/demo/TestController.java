@@ -49,7 +49,9 @@ public class TestController {
     private AsyncService service;
     private int batchSize = 10000;
     private int maxAwaitTime = 1000;
-    private int noOfChangeStream = 2;
+    private int noOfChangeStream = 3;
+
+	static StopWatch SW = new StopWatch();
 
     @RequestMapping("/test/{collection}")
     public String test(@PathVariable("collection") String collectionString,
@@ -169,34 +171,38 @@ public class TestController {
                     }
                     changeStream.batchSize(batchSize).maxAwaitTime(maxAwaitTime, TimeUnit.MILLISECONDS);
 
-                    var sw = new StopWatch();
 
                     changeStream.forEach(event -> {
-                        logger.info(changeStreamIndex+": "+event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
-                        RawBsonDocument doc = null;
-                        switch (event.getOperationType()) {
-                            case INSERT:
-                                doc = event.getFullDocument();
-                                //logger.info(doc.toJson());
-                                //logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
-                                if ("start".equalsIgnoreCase(doc.getString("i").getValue())) {
-                                    sw.start();
-                                } else if ("end".equalsIgnoreCase(doc.getString("i").getValue())) {
-                                    sw.stop();
-                                    int count = doc.getInt32("c").getValue();
-                                    logger.info("No. of record inserted: " + count + " takes " + sw.getTotalTimeSeconds() + "s, TPS:" + count / sw.getTotalTimeSeconds());
-                                }
-                                break;
-                            case UPDATE:
-                                if (fullDocument) {
-                                    doc = event.getFullDocument();
-                                    logger.info(doc.toJson());
-                                }
-                                logger.info(event.getUpdateDescription().toString());
-                                break;
-                            default:
-                                break;
-                        }
+						try{
+							logger.info(changeStreamIndex+": "+event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
+							RawBsonDocument doc = null;
+							switch (event.getOperationType()) {
+								case INSERT:
+									doc = event.getFullDocument();
+									//logger.info(doc.toJson());
+									//logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
+									if ("start".equalsIgnoreCase(doc.getString("i").getValue())) {
+										SW = new StopWatch();
+										SW.start();
+									} else if ("end".equalsIgnoreCase(doc.getString("i").getValue())) {
+										SW.stop();
+										int count = doc.getInt32("c").getValue();
+										logger.info(changeStreamIndex+": No. of record inserted: " + count + " takes " + SW.getTotalTimeSeconds() + "s, TPS:" + count / SW.getTotalTimeSeconds());
+									}
+									break;
+								case UPDATE:
+									if (fullDocument) {
+										doc = event.getFullDocument();
+										logger.info(doc.toJson());
+									}
+									logger.info(event.getUpdateDescription().toString());
+									break;
+								default:
+									break;
+							}
+						}catch(Exception ex){
+							ex.printStackTrace();
+						}
                     });
                 }
             });
@@ -283,42 +289,46 @@ public class TestController {
                         changeStream = changeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
                     }
                     changeStream.batchSize(batchSize).maxAwaitTime(maxAwaitTime, TimeUnit.MILLISECONDS);
-                    var sw = new StopWatch();
                     MongoCursor<ChangeStreamDocument<RawBsonDocument>> a = changeStream.iterator();
 
                     MongoChangeStreamCursor<ChangeStreamDocument<RawBsonDocument>> b = changeStream.cursor();
 
                     try (MongoChangeStreamCursor<ChangeStreamDocument<RawBsonDocument>> cursor = changeStream.cursor()) {
                         while (true) {
-                            ChangeStreamDocument<RawBsonDocument> event = cursor.tryNext();
-                            if (event == null) {
-                                continue;
-                            }
-                            logger.info(changeStreamIndex+": "+event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
-                            RawBsonDocument doc = null;
-                            switch (event.getOperationType()) {
-                                case INSERT:
-                                    doc = event.getFullDocument();
-                                    //logger.info(doc.toJson());
-                                    //logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
-                                    if ("start".equalsIgnoreCase(doc.getString("i").getValue())) {
-                                        sw.start();
-                                    } else if ("end".equalsIgnoreCase(doc.getString("i").getValue())) {
-                                        sw.stop();
-                                        int count = doc.getInt32("c").getValue();
-                                        logger.info("No. of record inserted: " + count + " takes " + sw.getTotalTimeSeconds() + "s, TPS:" + count / sw.getTotalTimeSeconds());
-                                    }
-                                    break;
-                                case UPDATE:
-                                    if (fullDocument) {
-                                        doc = event.getFullDocument();
-                                        logger.info(doc.toJson());
-                                    }
-                                    logger.info(event.getUpdateDescription().toString());
-                                    break;
-                                default:
-                                    break;
-                            }
+							try{
+								ChangeStreamDocument<RawBsonDocument> event = cursor.tryNext();
+								if (event == null) {
+									continue;
+								}
+								logger.info(changeStreamIndex+": "+event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
+								RawBsonDocument doc = null;
+								switch (event.getOperationType()) {
+									case INSERT:
+										doc = event.getFullDocument();
+										//logger.info(doc.toJson());
+										//logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
+										if ("start".equalsIgnoreCase(doc.getString("i").getValue())) {
+											SW = new StopWatch();
+											SW.start();
+										} else if ("end".equalsIgnoreCase(doc.getString("i").getValue())) {
+											SW.stop();
+											int count = doc.getInt32("c").getValue();
+											logger.info(changeStreamIndex+": No. of record inserted: " + count + " takes " + SW.getTotalTimeSeconds() + "s, TPS:" + count / SW.getTotalTimeSeconds());
+										}
+										break;
+									case UPDATE:
+										if (fullDocument) {
+											doc = event.getFullDocument();
+											logger.info(doc.toJson());
+										}
+										logger.info(event.getUpdateDescription().toString());
+										break;
+									default:
+										break;
+								}
+							}catch(Exception ex){
+								ex.printStackTrace();
+							}
                         }
                     }
                 }
