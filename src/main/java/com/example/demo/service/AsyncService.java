@@ -3,6 +3,7 @@ package com.example.demo.service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import org.bson.Document;
@@ -14,10 +15,9 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 
+import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.InsertOneModel;
 import com.mongodb.client.model.WriteModel;
-
-import lombok.var;
 
 @Component
 public class AsyncService {
@@ -30,19 +30,19 @@ public class AsyncService {
     @Async
     public CompletableFuture<Void> insert(int itemsPerThread, int index, String collection) throws InterruptedException {
         logger.info(Thread.currentThread().getName() + " start at: " + LocalDateTime.now().toString());
-        var bulkOperations = new ArrayList<WriteModel<Document>>();
+        List<WriteModel<Document>> bulkOperations = new ArrayList<WriteModel<Document>>();
         for (int i = 0; i < itemsPerThread; i++) {
             Document doc = new Document();
             doc.put("i", index + "-" + i);
             doc.put("t", new Date());
             bulkOperations.add(new InsertOneModel<>(doc));
         }
-        var sw = new StopWatch();
+        StopWatch sw = new StopWatch();
         logger.info("start bulk write");
         sw.start();
         mongoTemplate.getCollection(collection).bulkWrite(bulkOperations);
         sw.stop();
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.append(Thread.currentThread().getName());
         sb.append(" takes ");
         sb.append(sw.getTotalTimeSeconds());
@@ -56,12 +56,12 @@ public class AsyncService {
     @Async
     public CompletableFuture<Void> insertOne(int itemsPerThread, int index, String collection) throws InterruptedException {
         logger.info(Thread.currentThread().getName() + " start at: " + LocalDateTime.now().toString());
-        //var bulkOperations = new ArrayList<WriteModel<Document>>();
-        var c = mongoTemplate.getCollection(collection);
-        var sw = new StopWatch();
+        //List<WriteModel<Document>> bulkOperations = new ArrayList<WriteModel<Document>>();
+        MongoCollection<Document> c = mongoTemplate.getCollection(collection);
+        StopWatch sw = new StopWatch();
         sw.start();
         for (int i = 0; i < itemsPerThread; i++) {
-            var sw2 = new StopWatch();
+            StopWatch sw2 = new StopWatch();
             sw2.start();
             Document doc = new Document();
             doc.put("i", index + "-" + i);
@@ -71,7 +71,7 @@ public class AsyncService {
         }
         //logger.info("start bulk write");
         sw.stop();
-        var sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         sb.append(Thread.currentThread().getName());
         sb.append(" takes ");
         sb.append(sw.getTotalTimeSeconds());
