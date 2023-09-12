@@ -28,13 +28,15 @@ public class AsyncService {
     private MongoTemplate mongoTemplate;
 
     @Async
-    public CompletableFuture<Void> insert(int itemsPerThread, int index, String collection) throws InterruptedException {
+    public CompletableFuture<Void> insert(int itemsPerThread, int index, String collection, Document d) throws InterruptedException {
         logger.info(Thread.currentThread().getName() + " start at: " + LocalDateTime.now().toString());
         List<WriteModel<Document>> bulkOperations = new ArrayList<WriteModel<Document>>();
         for (int i = 0; i < itemsPerThread; i++) {
             Document doc = new Document();
             doc.put("i", index + "-" + i);
             doc.put("t", new Date());
+            if(d!=null)
+                doc.put("d", d);
             bulkOperations.add(new InsertOneModel<>(doc));
         }
         StopWatch sw = new StopWatch();
@@ -54,7 +56,7 @@ public class AsyncService {
     }
 
     @Async
-    public CompletableFuture<Void> insertOne(int itemsPerThread, int index, String collection) throws InterruptedException {
+    public CompletableFuture<Void> insertOne(int itemsPerThread, int index, String collection, Document d) throws InterruptedException {
         logger.info(Thread.currentThread().getName() + " start at: " + LocalDateTime.now().toString());
         //List<WriteModel<Document>> bulkOperations = new ArrayList<WriteModel<Document>>();
         MongoCollection<Document> c = mongoTemplate.getCollection(collection);
@@ -66,6 +68,8 @@ public class AsyncService {
             Document doc = new Document();
             doc.put("i", index + "-" + i);
             doc.put("t", new Date());
+            if(d!=null)
+                doc.put("d", d);
             c.insertOne(doc);
             //logger.info("insert takes" + sw.getTotalTimeSeconds() + "s");
         }
