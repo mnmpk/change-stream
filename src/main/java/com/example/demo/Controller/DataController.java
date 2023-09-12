@@ -38,6 +38,7 @@ public class DataController {
         {
             try {
                 logger.info("test start");
+                Document d = new Document("test","test");
 
                 List<CompletableFuture<Void>> ends = new ArrayList<CompletableFuture<Void>>();
                 StopWatch sw = new StopWatch();
@@ -48,9 +49,9 @@ public class DataController {
                 sw.start();
                 for (int i = 1; i <= threads; i++) {
                     if(batch)
-                        ends.add(service.insert(itemsPerThread, i, collectionString));
+                        ends.add(service.insert(itemsPerThread, i, collectionString, d));
                     else
-                        ends.add(service.insertOne(itemsPerThread, i, collectionString));
+                        ends.add(service.insertOne(itemsPerThread, i, collectionString, d));
                 }
                 CompletableFuture.allOf(ends.toArray(new CompletableFuture[ends.size()])).join();
                 sw.stop();
