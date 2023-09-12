@@ -2,6 +2,7 @@ package com.example.demo.Controller;
 
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import org.bson.BsonDateTime;
@@ -17,8 +18,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.service.AsyncService;
-
-import lombok.var;
 
 @RestController
 public class DataController {
@@ -40,8 +39,8 @@ public class DataController {
             try {
                 logger.info("test start");
 
-                var ends = new ArrayList<CompletableFuture<Void>>();
-                var sw = new StopWatch();
+                List<CompletableFuture<Void>> ends = new ArrayList<CompletableFuture<Void>>();
+                StopWatch sw = new StopWatch();
                 Document doc = new Document();
                 doc.put("i", "start");
                 doc.put("t", new BsonDateTime(new Date().getTime()));
@@ -61,7 +60,7 @@ public class DataController {
                 doc.put("t", new Date());
                 mongoTemplate.getCollection(collectionString).insertOne(doc);
 
-                var sb = new StringBuilder();
+                StringBuilder sb = new StringBuilder();
                 sb.append("test() takes ");
                 sb.append(sw.getTotalTimeSeconds());
                 sb.append("s");
