@@ -55,30 +55,26 @@ public class CSController {
         final String pipeline = """
 				{
 					$match:
-					  {
+					{
 						$expr: {
 						  $eq: [
 							{
-							  $mod: [
-								{
-								  $divide: [
-									{
-									  $toLong: {
-										$toDate: "$documentKey._id",
-									  },
-									},
-									1000,
-								  ],
-								},
+							  $abs: {
+								$mod: [
+								  {
+									$toHashedIndexKey:
+									  "$documentKey._id",
+								  },
 								""" + noOfChangeStream + """
 									,
-							  ],
+								],
+							  },
 							},
 							""" + changeStreamIndex + """
 								,
 						  ],
 						},
-					  },
+					  }
 				  }
 					""";
         CompletableFuture.runAsync(new Runnable() {
@@ -172,30 +168,26 @@ public class CSController {
         final String pipeline = """
 				{
 					$match:
-					  {
+					{
 						$expr: {
 						  $eq: [
 							{
-							  $mod: [
-								{
-								  $divide: [
-									{
-									  $toLong: {
-										$toDate: "$$documentKey._id",
-									  },
-									},
-									1000,
-								  ],
-								},
+							  $abs: {
+								$mod: [
+								  {
+									$toHashedIndexKey:
+									  "$documentKey._id",
+								  },
 								""" + noOfChangeStream + """
 									,
-							  ],
+								],
+							  },
 							},
 							""" + changeStreamIndex + """
 								,
 						  ],
 						},
-					  },
+					  }
 				  }
 					""";
         CompletableFuture.runAsync(new Runnable() {
