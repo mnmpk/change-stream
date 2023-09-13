@@ -1,4 +1,4 @@
-package com.example.demo.con;
+package com.example.demo.controller;
 
 import java.util.Date;
 import java.util.List;
