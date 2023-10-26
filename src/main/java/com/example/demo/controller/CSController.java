@@ -111,7 +111,7 @@ public class CSController {
 
                 changeStream.forEach(event -> {
                     try {
-                        logger.info(changeStreamIndex + ": " + event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
+                        logger.info(changeStreamIndex + ": " + event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson()+"@clusterTime:"+event.getClusterTime());
                         Document doc = null;
                         switch (event.getOperationType()) {
                             case INSERT:
@@ -234,7 +234,7 @@ public class CSController {
                             if (event == null) {
                                 continue;
                             }
-                            logger.info(changeStreamIndex + ": " + event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson());
+                            logger.info(changeStreamIndex + ": " + event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson()+"@clusterTime:"+event.getClusterTime());
                             Document doc = null;
                             switch (event.getOperationType()) {
                                 case INSERT:
