@@ -37,8 +37,7 @@ public class ChangeStreamService<T> {
         }
     }
 
-    public void run(int noOfChangeStream, int changeStreamIndex, List<Document> pipeline,
-            Consumer<ChangeStreamDocument<Document>> body) {
+    public List<Document> splitStage(int noOfChangeStream, int changeStreamIndex, List<Document> pipeline) {
         List<Document> p = new ArrayList<>();
         p.addAll(pipeline);
         p.add(new Document("$match",
@@ -47,8 +46,15 @@ public class ChangeStreamService<T> {
                                 new Document("$mod", Arrays.asList(
                                         new Document("$toHashedIndexKey", "$documentKey._id"), noOfChangeStream))),
                                 changeStreamIndex))))));
+        return p;
+
+    }
+
+    public void run(int noOfChangeStream, int changeStreamIndex, List<Document> pipeline,
+            Consumer<ChangeStreamDocument<Document>> body) {
         // TODO: allow watch both DB and coll
-        ChangeStreamIterable<Document> changeStream = mongoTemplate.getDb().watch(p, Document.class);
+        ChangeStreamIterable<Document> changeStream = mongoTemplate.getDb()
+                .watch(splitStage(noOfChangeStream, changeStreamIndex, pipeline), Document.class);
         if (earilest != null) {
             changeStream.resumeAfter(earilest.getResumeToken());
         }
