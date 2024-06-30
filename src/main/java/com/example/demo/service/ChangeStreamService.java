@@ -17,7 +17,7 @@ import com.mongodb.client.ChangeStreamIterable;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
 
 @Service
-public class ChangeStreamService {
+public class ChangeStreamService<T> {
 
     @Autowired
     private MongoTemplate mongoTemplate;
@@ -27,28 +27,33 @@ public class ChangeStreamService {
     private static ChangeStreamProcess<Document> earilest = null;
     private static ChangeStreamProcess<Document> latest = null;
 
-                                    //TODO: allow use custom class
-    public void start(int noOfChangeStream, List<Document> pipeline, Consumer<ChangeStreamDocument<Document>> body)
+    // TODO: allow use custom class
+    public void splitRun(int noOfChangeStream, List<Document> pipeline, Consumer<ChangeStreamDocument<Document>> body)
             throws Exception {
         if (changeStreams.size() > 0)
             throw new Exception("Change stream is already running");
         for (int i = 0; i < noOfChangeStream; i++) {
-            List<Document> p = new ArrayList<>();
-            p.addAll(pipeline);
-            p.add(new Document("$match",
-                    new Document("$and", new Document("$expr",
-                            new Document("$eq", Arrays.asList(new Document("$abs",
-                                    new Document("$mod", Arrays.asList(
-                                            new Document("$toHashedIndexKey", "$documentKey._id"), noOfChangeStream))),
-                                    i))))));
-                                    //TODO: allow watch both DB and coll
-            ChangeStreamIterable<Document> changeStream = mongoTemplate.getDb().watch(p, Document.class);
-            if (earilest != null) {
-                changeStream.resumeAfter(earilest.getResumeToken());
-            }
-            changeStreams.add(new ChangeStreamProcess<Document>(changeStream, latest.getClusterTime(), body));
-            changeStreams.get(i).run();
+            run(noOfChangeStream, i, pipeline, body);
         }
+    }
+
+    public void run(int noOfChangeStream, int changeStreamIndex, List<Document> pipeline,
+            Consumer<ChangeStreamDocument<Document>> body) {
+        List<Document> p = new ArrayList<>();
+        p.addAll(pipeline);
+        p.add(new Document("$match",
+                new Document("$and", new Document("$expr",
+                        new Document("$eq", Arrays.asList(new Document("$abs",
+                                new Document("$mod", Arrays.asList(
+                                        new Document("$toHashedIndexKey", "$documentKey._id"), noOfChangeStream))),
+                                changeStreamIndex))))));
+        // TODO: allow watch both DB and coll
+        ChangeStreamIterable<Document> changeStream = mongoTemplate.getDb().watch(p, Document.class);
+        if (earilest != null) {
+            changeStream.resumeAfter(earilest.getResumeToken());
+        }
+        changeStreams.add(new ChangeStreamProcess<Document>(changeStream, latest.getClusterTime(), body));
+        changeStreams.get(changeStreamIndex).run();
     }
 
     public void stop() {
