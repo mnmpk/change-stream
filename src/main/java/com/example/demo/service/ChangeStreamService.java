@@ -1,13 +1,13 @@
 package com.example.demo.service;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 
-import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.bson.conversions.Bson;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Service;
@@ -17,7 +17,8 @@ import com.mongodb.client.ChangeStreamIterable;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
 
 @Service
-public class ChangeStreamService<T> {
+public class ChangeStreamService {
+    private Logger logger = LoggerFactory.getLogger(getClass());
 
     @Autowired
     private MongoTemplate mongoTemplate;
@@ -27,39 +28,40 @@ public class ChangeStreamService<T> {
     private static ChangeStreamProcess<Document> earilest = null;
     private static ChangeStreamProcess<Document> latest = null;
 
-    // TODO: allow use custom class
-    public void splitRun(int noOfChangeStream, List<Document> pipeline, Consumer<ChangeStreamDocument<Document>> body)
+    public void splitRun(int noOfChangeStream, List<Bson> pipeline, boolean resume,
+            Consumer<ChangeStreamDocument<Document>> body)
             throws Exception {
+        if (changeStreams == null)
+            changeStreams = new ArrayList<>();
         if (changeStreams.size() > 0)
             throw new Exception("Change stream is already running");
         for (int i = 0; i < noOfChangeStream; i++) {
-            run(noOfChangeStream, i, pipeline, body);
+            run(noOfChangeStream, i, pipeline, resume, body);
         }
     }
 
-    public List<Document> splitStage(int noOfChangeStream, int changeStreamIndex, List<Document> pipeline) {
-        List<Document> p = new ArrayList<>();
-        p.addAll(pipeline);
-        p.add(new Document("$match",
-                new Document("$and", new Document("$expr",
-                        new Document("$eq", Arrays.asList(new Document("$abs",
-                                new Document("$mod", Arrays.asList(
-                                        new Document("$toHashedIndexKey", "$documentKey._id"), noOfChangeStream))),
-                                changeStreamIndex))))));
-        return p;
-
-    }
-
-    public void run(int noOfChangeStream, int changeStreamIndex, List<Document> pipeline,
+    public void run(int noOfChangeStream, int changeStreamIndex, List<Bson> pipeline, boolean resume,
             Consumer<ChangeStreamDocument<Document>> body) {
-        // TODO: allow watch both DB and coll
-        ChangeStreamIterable<Document> changeStream = mongoTemplate.getDb()
-                .watch(splitStage(noOfChangeStream, changeStreamIndex, pipeline), Document.class);
-        if (earilest != null) {
-            changeStream.resumeAfter(earilest.getResumeToken());
-        }
-        changeStreams.add(new ChangeStreamProcess<Document>(changeStream, latest.getClusterTime(), body));
-        changeStreams.get(changeStreamIndex).run();
+        ChangeStreamProcess<Document> process = new ChangeStreamProcess<Document>(noOfChangeStream, changeStreamIndex,
+                pipeline, latest != null ? latest.getClusterTime() : null, body) {
+
+            @Override
+            public ChangeStreamIterable<Document> initChangeStream() {
+                logger.info(getPipeline().toString());
+                ChangeStreamIterable<Document> cs = mongoTemplate.getDb().watch(getPipeline());
+                if (resume && earilest != null) {
+                    logger.info(changeStreamIndex + "/" + noOfChangeStream + ": Resume Change stream from: "
+                            + earilest.getClusterTime()/*+", resume token:"+earilest.getResumeToken()*/);
+                    //cs.resumeAfter(earilest.getResumeToken());
+                    cs.startAtOperationTime(earilest.getClusterTime());
+                }
+                return cs;
+            }
+
+        };
+        changeStreams.add(process);
+        logger.info(changeStreamIndex + "/" + noOfChangeStream + ": Run Change stream");
+        new Thread(changeStreams.get(changeStreamIndex)).start();
     }
 
     public void stop() {

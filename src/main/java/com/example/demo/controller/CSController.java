@@ -18,11 +18,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.demo.service.ChangeStreamService;
 import com.mongodb.client.ChangeStreamIterable;
 import com.mongodb.client.MongoChangeStreamCursor;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Aggregates;
+import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Sorts;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
 import com.mongodb.client.model.changestream.FullDocument;
@@ -31,6 +34,9 @@ import com.mongodb.client.model.changestream.FullDocument;
 public class CSController {
 
     private Logger logger = LoggerFactory.getLogger(getClass());
+    @Autowired
+    private ChangeStreamService changeStreamService;
+
     @Autowired
     private MongoTemplate mongoTemplate;
 
@@ -53,30 +59,30 @@ public class CSController {
             @RequestParam(required = false, defaultValue = "1") int noOfChangeStream,
             @RequestParam(required = false, defaultValue = "false") boolean fullDocument) {
         final String pipeline = """
-				{
-					$match:
-					{
-						$expr: {
-						  $eq: [
-							{
-							  $abs: {
-								$mod: [
-								  {
-									$toHashedIndexKey:
-									  "$documentKey._id",
-								  },
-								""" + noOfChangeStream + """
-									,
-								],
-							  },
-							},
-							""" + changeStreamIndex + """
-								,
-						  ],
-						},
-					  }
-				  }
-					""";
+                {
+                	$match:
+                	{
+                		$expr: {
+                		  $eq: [
+                			{
+                			  $abs: {
+                				$mod: [
+                				  {
+                					$toHashedIndexKey:
+                					  "$documentKey._id",
+                				  },
+                				""" + noOfChangeStream + """
+                		,
+                	],
+                  },
+                },
+                """ + changeStreamIndex + """
+                			,
+                	  ],
+                	},
+                  }
+                 }
+                """;
         CompletableFuture.runAsync(new Runnable() {
             @Override
             public void run() {
@@ -98,7 +104,8 @@ public class CSController {
                         logger.info(db.getName() + " resume after: " + resumeTokenString);
                         BsonDocument resumeToken = new BsonDocument();
                         resumeToken.put("_data", new BsonString(resumeTokenString));
-                        changeStream = db.watch(List.of(Document.parse(pipeline)), Document.class).resumeAfter(resumeToken);
+                        changeStream = db.watch(List.of(Document.parse(pipeline)), Document.class)
+                                .resumeAfter(resumeToken);
                     } else {
                         logger.info(changeStreamIndex + ": Start watching " + db.getName());
                         changeStream = db.watch(List.of(Document.parse(pipeline)), Document.class);
@@ -111,21 +118,27 @@ public class CSController {
 
                 changeStream.forEach(event -> {
                     try {
-                        logger.info(changeStreamIndex + ": " + event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson()+"@clusterTime:"+event.getClusterTime());
+                        logger.info(changeStreamIndex + ": " + event.getOperationType().getValue()
+                                + " operation, resume token:" + event.getResumeToken().toJson() + "@clusterTime:"
+                                + event.getClusterTime());
                         Document doc = null;
                         switch (event.getOperationType()) {
                             case INSERT:
                                 doc = event.getFullDocument();
-                                //logger.info(doc.toJson());
-                                //logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
+                                // logger.info(doc.toJson());
+                                // logger.info("Diff: " + (new Date().getTime() - new
+                                // Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
                                 if ("start".equalsIgnoreCase(doc.getString("i"))) {
-                                    mongoTemplate.getCollection("timer").insertOne(new Document("t", new Date().getTime()));
+                                    mongoTemplate.getCollection("timer")
+                                            .insertOne(new Document("t", new Date().getTime()));
                                 } else if ("end".equalsIgnoreCase(doc.getString("i"))) {
-									Long end = new Date().getTime();
-                                    Long start = mongoTemplate.getCollection("timer").find().sort(Sorts.descending("t")).limit(1).first().getLong("t");
+                                    Long end = new Date().getTime();
+                                    Long start = mongoTemplate.getCollection("timer").find().sort(Sorts.descending("t"))
+                                            .limit(1).first().getLong("t");
                                     int count = doc.getInteger("c");
-									double diff = (end-start)/1000.0;
-                                    logger.info(changeStreamIndex + ": No. of record inserted: " + count + " takes " + diff + "s, TPS:" + count / diff);
+                                    double diff = (end - start) / 1000.0;
+                                    logger.info(changeStreamIndex + ": No. of record inserted: " + count + " takes "
+                                            + diff + "s, TPS:" + count / diff);
                                 }
                                 break;
                             case UPDATE:
@@ -166,30 +179,30 @@ public class CSController {
             @RequestParam(required = false, defaultValue = "1") int noOfChangeStream,
             @RequestParam(required = false, defaultValue = "false") boolean fullDocument) {
         final String pipeline = """
-				{
-					$match:
-					{
-						$expr: {
-						  $eq: [
-							{
-							  $abs: {
-								$mod: [
-								  {
-									$toHashedIndexKey:
-									  "$documentKey._id",
-								  },
-								""" + noOfChangeStream + """
-									,
-								],
-							  },
-							},
-							""" + changeStreamIndex + """
-								,
-						  ],
-						},
-					  }
-				  }
-					""";
+                {
+                	$match:
+                	{
+                		$expr: {
+                		  $eq: [
+                			{
+                			  $abs: {
+                				$mod: [
+                				  {
+                					$toHashedIndexKey:
+                					  "$documentKey._id",
+                				  },
+                				""" + noOfChangeStream + """
+                		,
+                	],
+                  },
+                },
+                """ + changeStreamIndex + """
+                			,
+                	  ],
+                	},
+                  }
+                 }
+                """;
         CompletableFuture.runAsync(new Runnable() {
             @Override
             public void run() {
@@ -212,7 +225,8 @@ public class CSController {
                         logger.info(db.getName() + " resume after: " + resumeTokenString);
                         BsonDocument resumeToken = new BsonDocument();
                         resumeToken.put("_data", new BsonString(resumeTokenString));
-                        changeStream = db.watch(List.of(Document.parse(pipeline)), Document.class).resumeAfter(resumeToken);
+                        changeStream = db.watch(List.of(Document.parse(pipeline)), Document.class)
+                                .resumeAfter(resumeToken);
                     } else {
                         logger.info(changeStreamIndex + ": Start watching " + db.getName());
                         changeStream = db.watch(List.of(Document.parse(pipeline)), Document.class);
@@ -225,7 +239,7 @@ public class CSController {
                 MongoCursor<ChangeStreamDocument<Document>> a = changeStream.iterator();
 
                 MongoChangeStreamCursor<ChangeStreamDocument<Document>> b = changeStream.cursor();
-                //b.getResumeToken();
+                // b.getResumeToken();
 
                 try (MongoChangeStreamCursor<ChangeStreamDocument<Document>> cursor = changeStream.cursor()) {
                     while (true) {
@@ -234,22 +248,28 @@ public class CSController {
                             if (event == null) {
                                 continue;
                             }
-                            logger.info(changeStreamIndex + ": " + event.getOperationType().getValue() + " operation, resume token:" + event.getResumeToken().toJson()+"@clusterTime:"+event.getClusterTime());
+                            logger.info(changeStreamIndex + ": " + event.getOperationType().getValue()
+                                    + " operation, resume token:" + event.getResumeToken().toJson() + "@clusterTime:"
+                                    + event.getClusterTime());
                             Document doc = null;
                             switch (event.getOperationType()) {
                                 case INSERT:
                                     doc = event.getFullDocument();
-                                    //logger.info(doc.toJson());
-                                    //logger.info("Diff: " + (new Date().getTime() - new Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
-									if ("start".equalsIgnoreCase(doc.getString("i"))) {
-										mongoTemplate.getCollection("timer").insertOne(new Document("t", new Date().getTime()));
-									} else if ("end".equalsIgnoreCase(doc.getString("i"))) {
-										Long end = new Date().getTime();
-										Long start = mongoTemplate.getCollection("timer").find().sort(Sorts.descending("t")).limit(1).first().getLong("t");
-										int count = doc.getInteger("c");
-										double diff = (end-start)/1000.0;
-										logger.info(changeStreamIndex + ": No. of record inserted: " + count + " takes " + diff + "s, TPS:" + count / diff);
-									}
+                                    // logger.info(doc.toJson());
+                                    // logger.info("Diff: " + (new Date().getTime() - new
+                                    // Date(doc.getDateTime("t").getValue()).getTime()+ "ms"));
+                                    if ("start".equalsIgnoreCase(doc.getString("i"))) {
+                                        mongoTemplate.getCollection("timer")
+                                                .insertOne(new Document("t", new Date().getTime()));
+                                    } else if ("end".equalsIgnoreCase(doc.getString("i"))) {
+                                        Long end = new Date().getTime();
+                                        Long start = mongoTemplate.getCollection("timer").find()
+                                                .sort(Sorts.descending("t")).limit(1).first().getLong("t");
+                                        int count = doc.getInteger("c");
+                                        double diff = (end - start) / 1000.0;
+                                        logger.info(changeStreamIndex + ": No. of record inserted: " + count + " takes "
+                                                + diff + "s, TPS:" + count / diff);
+                                    }
                                     break;
                                 case UPDATE:
                                     if (fullDocument) {
@@ -268,5 +288,18 @@ public class CSController {
                 }
             }
         });
+    }
+
+    @RequestMapping("/watch2/{collection}")
+    public void watch2(@PathVariable("collection") String collection,
+            @RequestParam(required = false, defaultValue = "1") int noOfChangeStream) throws Exception {
+        changeStreamService.splitRun(noOfChangeStream, (List.of(Aggregates.match(
+                Filters.in("ns.coll", List.of(collection))))), true, (e) -> {
+                    logger.info("Body:"+e.getFullDocument());
+                });
+    }
+    @RequestMapping("/stop-watch2")
+    public void stopWatch() throws Exception {
+        changeStreamService.stop();
     }
 }

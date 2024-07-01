@@ -72,8 +72,8 @@ public class AsyncService {
                 doc.put("d", d);
             c.insertOne(doc);
             //logger.info("insert takes" + sw.getTotalTimeSeconds() + "s");
+            logger.info(doc.toJson());
         }
-        //logger.info("start bulk write");
         sw.stop();
         StringBuilder sb = new StringBuilder();
         sb.append(Thread.currentThread().getName());
