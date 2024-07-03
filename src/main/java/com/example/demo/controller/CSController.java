@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
 import org.bson.BsonDocument;
 import org.bson.BsonString;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.demo.model.ChangeStreamProcess;
+import com.example.demo.model.ChangeStreamProcessConfig;
 import com.example.demo.service.ChangeStreamService;
 import com.mongodb.client.ChangeStreamIterable;
 import com.mongodb.client.MongoChangeStreamCursor;
@@ -35,7 +38,7 @@ public class CSController {
 
     private Logger logger = LoggerFactory.getLogger(getClass());
     @Autowired
-    private ChangeStreamService changeStreamService;
+    private ChangeStreamService<Document> changeStreamService;
 
     @Autowired
     private MongoTemplate mongoTemplate;
@@ -293,13 +296,23 @@ public class CSController {
     @RequestMapping("/watch2/{collection}")
     public void watch2(@PathVariable("collection") String collection,
             @RequestParam(required = false, defaultValue = "1") int noOfChangeStream) throws Exception {
-        changeStreamService.splitRun(noOfChangeStream, (List.of(Aggregates.match(
-                Filters.in("ns.coll", List.of(collection))))), true, (e) -> {
-                    logger.info("Body:"+e.getFullDocument());
-                });
-    }
-    @RequestMapping("/stop-watch2")
-    public void stopWatch() throws Exception {
-        changeStreamService.stop();
+        changeStreamService.scaleRun(noOfChangeStream, (ChangeStreamProcessConfig<Document> config) -> {
+            List<Bson> pipeline = (List.of(Aggregates.match(
+                    Filters.in("ns.coll", List.of(collection)))));
+            return new ChangeStreamProcess<Document>(config,
+                    (e) -> {
+                        logger.info("Body:" + e.getFullDocument());
+                    }) {
+                @Override
+                public ChangeStreamIterable<Document> initChangeStream(List<Bson> p) {
+                    if (pipeline != null && pipeline.size() > 0)
+                        p.addAll(pipeline);
+
+                    return mongoTemplate.getDb().watch(p, Document.class);
+                }
+
+            };
+        });
+
     }
 }
