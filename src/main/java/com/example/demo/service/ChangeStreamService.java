@@ -38,7 +38,7 @@ public class ChangeStreamService<T> {
                 .startAt(earilest != null ? earilest.getClusterTime() : null)
                 .endAt(latest != null ? latest.getClusterTime() : null)
                 .noOfChangeStream(noOfChangeStream).changeStreamIndex(changeStreamIndex).build()));
-        logger.info(changeStreamIndex + "/" + noOfChangeStream + ": Run Change stream");
+        logger.info((changeStreamIndex+1) + "/" + noOfChangeStream + ": Run Change stream");
         new Thread(changeStreams.get(changeStreamIndex)).start();
     }
 

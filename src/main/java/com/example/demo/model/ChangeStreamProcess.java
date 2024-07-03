@@ -50,7 +50,7 @@ public abstract class ChangeStreamProcess<T> implements Runnable {
 
         if (config.getStartAt() != null) {
             logger.info(
-                    config.getChangeStreamIndex() + "/" + config.getNoOfChangeStream() + ": Resume Change stream from: "
+                (config.getChangeStreamIndex()+1) + "/" + config.getNoOfChangeStream() + ": Resume Change stream from: "
                             + config.getStartAt());
             this.changeStream.startAtOperationTime(config.getStartAt());
         }
@@ -62,7 +62,7 @@ public abstract class ChangeStreamProcess<T> implements Runnable {
                 if (event == null || (lastEventAt != null && lastEventAt.compareTo(event.getClusterTime()) >= 0)) {
                     if (event != null && lastEventAt != null) {
                         logger.info(
-                                config.getChangeStreamIndex() + "/" + config.getNoOfChangeStream()
+                            (config.getChangeStreamIndex()+1) + "/" + config.getNoOfChangeStream()
                                         + ": Skip event, cluster time:" + lastEventAt
                                         + ", event time:" + event.getClusterTime());
                     }
@@ -71,7 +71,7 @@ public abstract class ChangeStreamProcess<T> implements Runnable {
                 lastEventAt = event.getClusterTime();
                 // resumeToken = event.getResumeToken();
                 logger.info(
-                        config.getChangeStreamIndex() + "/" + config.getNoOfChangeStream()
+                        (config.getChangeStreamIndex()+1) + "/" + config.getNoOfChangeStream()
                                 + ": Event received, cluster time:" + lastEventAt
                 /* + ", resume token:" + resumeToken */);
                 body.accept(event);
@@ -83,7 +83,7 @@ public abstract class ChangeStreamProcess<T> implements Runnable {
     }
 
     public void stop() {
-        logger.info(config.getChangeStreamIndex() + "/" + config.getNoOfChangeStream() + ": Stop Change stream");
+        logger.info((config.getChangeStreamIndex()+1) + "/" + config.getNoOfChangeStream() + ": Stop Change stream");
         active.set(false);
     }
 

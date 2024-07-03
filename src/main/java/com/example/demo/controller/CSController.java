@@ -308,7 +308,7 @@ public class CSController {
                     if (pipeline != null && pipeline.size() > 0)
                         p.addAll(pipeline);
 
-                    return mongoTemplate.getDb().watch(p, Document.class);
+                    return mongoTemplate.getDb().watch(p, Document.class).batchSize(100).maxAwaitTime(300, TimeUnit.MILLISECONDS);
                 }
 
             };
