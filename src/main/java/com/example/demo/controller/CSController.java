@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.service.ChangeStreamService;
+import com.example.demo.service.ReactiveChangeStreamService;
 import com.mongodb.client.ChangeStreamIterable;
 import com.mongodb.client.MongoChangeStreamCursor;
 import com.mongodb.client.MongoCollection;
@@ -36,6 +37,8 @@ public class CSController {
     private Logger logger = LoggerFactory.getLogger(getClass());
     @Autowired
     private ChangeStreamService changeStreamService;
+    @Autowired
+    private ReactiveChangeStreamService reactiveChangeStreamService;
 
     @Autowired
     private MongoTemplate mongoTemplate;
@@ -301,5 +304,10 @@ public class CSController {
     @RequestMapping("/stop-watch2")
     public void stopWatch() throws Exception {
         changeStreamService.stop();
+    }
+
+    @RequestMapping("/react-watch/{collection}")
+    public void reactiveWwatch(@PathVariable("collection") String collection) throws Exception {
+        reactiveChangeStreamService.run(collection);
     }
 }
