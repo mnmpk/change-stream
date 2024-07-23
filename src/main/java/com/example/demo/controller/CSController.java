@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.bson.BsonDocument;
 import org.bson.BsonString;
+import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
@@ -48,12 +49,18 @@ public class CSController {
 
     @RequestMapping("/watch2/{collection}")
     public void watch2(@PathVariable("collection") String collection,
-    @RequestParam(required = false, defaultValue = "10") int batchSize,
-    @RequestParam(required = false, defaultValue = "10") int maxAwaitTime,
+            @RequestParam(required = false, defaultValue = "10") int batchSize,
+            @RequestParam(required = false, defaultValue = "10") int maxAwaitTime,
+            @RequestParam(required = false) long startAt,
+            @RequestParam(required = false) long lastEventTime,
             @RequestParam(required = false, defaultValue = "1") int noOfChangeStream) throws Exception {
         changeStreamService.scaleRun(noOfChangeStream, (ChangeStreamProcessConfig<Document> config) -> {
             List<Bson> pipeline = (List.of(Aggregates.match(
                     Filters.in("ns.coll", List.of(collection)))));
+            if (startAt > 0)
+                config.setStartAt(new BsonTimestamp(startAt));
+            if (lastEventTime > 0)
+                config.setEndAt(new BsonTimestamp(lastEventTime));
             return new ChangeStreamProcess<Document>(config,
                     (e) -> {
                         logger.info("Body:" + e.getFullDocument());
@@ -63,12 +70,14 @@ public class CSController {
                     if (pipeline != null && pipeline.size() > 0)
                         p.addAll(pipeline);
 
-                    return mongoTemplate.getDb().watch(p, Document.class).batchSize(batchSize).maxAwaitTime(maxAwaitTime, TimeUnit.MILLISECONDS);
+                    return mongoTemplate.getDb().watch(p, Document.class).batchSize(batchSize)
+                            .maxAwaitTime(maxAwaitTime, TimeUnit.MILLISECONDS);
                 }
 
             };
         });
     }
+
     @RequestMapping("/watch/{collection}")
     public void watch(@PathVariable("collection") String collection,
             @RequestParam(required = false, defaultValue = "10") int batchSize,
@@ -318,7 +327,6 @@ public class CSController {
             }
         });
     }
-
 
     @RequestMapping("/react-watch/{collection}")
     public void reactiveWatch(@PathVariable("collection") String collection) throws Exception {
