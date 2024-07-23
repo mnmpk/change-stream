@@ -53,7 +53,8 @@ public class CSController {
             @RequestParam(required = false, defaultValue = "10") int maxAwaitTime,
             @RequestParam(required = false) long startAt,
             @RequestParam(required = false) long lastEventTime,
-            @RequestParam(required = false, defaultValue = "1") int noOfChangeStream) throws Exception {
+            @RequestParam(required = false, defaultValue = "1") int noOfChangeStream,
+            @RequestParam(required = false, defaultValue = "false") boolean fullDocument) throws Exception {
         changeStreamService.scaleRun(noOfChangeStream, (ChangeStreamProcessConfig<Document> config) -> {
             List<Bson> pipeline = (List.of(Aggregates.match(
                     Filters.in("ns.coll", List.of(collection)))));
@@ -69,9 +70,13 @@ public class CSController {
                 public ChangeStreamIterable<Document> initChangeStream(List<Bson> p) {
                     if (pipeline != null && pipeline.size() > 0)
                         p.addAll(pipeline);
-
-                    return mongoTemplate.getDb().watch(p, Document.class).batchSize(batchSize)
+                    ChangeStreamIterable<Document> changeStream = mongoTemplate.getDb().watch(p, Document.class)
+                            .batchSize(batchSize)
                             .maxAwaitTime(maxAwaitTime, TimeUnit.MILLISECONDS);
+                    if (fullDocument) {
+                        changeStream = changeStream.fullDocument(FullDocument.UPDATE_LOOKUP);
+                    }
+                    return changeStream;
                 }
 
             };

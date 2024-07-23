@@ -38,7 +38,7 @@ public class ChangeStreamService<T> {
                 .startAt(earilest != null ? earilest.getClusterTime() : null)
                 .endAt(latest != null ? latest.getClusterTime() : null)
                 .noOfChangeStream(noOfChangeStream).changeStreamIndex(changeStreamIndex).build()));
-        logger.info((changeStreamIndex+1) + "/" + noOfChangeStream + ": Run Change stream");
+        logger.info((changeStreamIndex + 1) + "/" + noOfChangeStream + ": Run Change stream");
         new Thread(changeStreams.get(changeStreamIndex)).start();
     }
 
@@ -68,5 +68,14 @@ public class ChangeStreamService<T> {
             this.stop();
         }
         this.splitRun(noOfChangeStream, initProcess);
+    }
+
+    public void scaleRunRemote(
+            Function<ChangeStreamProcessConfig<T>, ChangeStreamProcess<T>> initProcess) throws Exception {
+        // TODO: get instance list
+        var noOfInstances = 2;
+        for (int i = 0; i < noOfInstances; i++) {
+            //TODO: Remote call to instance 
+        }
     }
 }
