@@ -46,6 +46,29 @@ public class CSController {
     @Autowired
     private MongoTemplate mongoTemplate;
 
+    @RequestMapping("/watch2/{collection}")
+    public void watch2(@PathVariable("collection") String collection,
+    @RequestParam(required = false, defaultValue = "10") int batchSize,
+    @RequestParam(required = false, defaultValue = "10") int maxAwaitTime,
+            @RequestParam(required = false, defaultValue = "1") int noOfChangeStream) throws Exception {
+        changeStreamService.scaleRun(noOfChangeStream, (ChangeStreamProcessConfig<Document> config) -> {
+            List<Bson> pipeline = (List.of(Aggregates.match(
+                    Filters.in("ns.coll", List.of(collection)))));
+            return new ChangeStreamProcess<Document>(config,
+                    (e) -> {
+                        logger.info("Body:" + e.getFullDocument());
+                    }) {
+                @Override
+                public ChangeStreamIterable<Document> initChangeStream(List<Bson> p) {
+                    if (pipeline != null && pipeline.size() > 0)
+                        p.addAll(pipeline);
+
+                    return mongoTemplate.getDb().watch(p, Document.class).batchSize(batchSize).maxAwaitTime(maxAwaitTime, TimeUnit.MILLISECONDS);
+                }
+
+            };
+        });
+    }
     @RequestMapping("/watch/{collection}")
     public void watch(@PathVariable("collection") String collection,
             @RequestParam(required = false, defaultValue = "10") int batchSize,
@@ -296,30 +319,9 @@ public class CSController {
         });
     }
 
-    @RequestMapping("/watch2/{collection}")
-    public void watch2(@PathVariable("collection") String collection,
-            @RequestParam(required = false, defaultValue = "1") int noOfChangeStream) throws Exception {
-        changeStreamService.scaleRun(noOfChangeStream, (ChangeStreamProcessConfig<Document> config) -> {
-            List<Bson> pipeline = (List.of(Aggregates.match(
-                    Filters.in("ns.coll", List.of(collection)))));
-            return new ChangeStreamProcess<Document>(config,
-                    (e) -> {
-                        logger.info("Body:" + e.getFullDocument());
-                    }) {
-                @Override
-                public ChangeStreamIterable<Document> initChangeStream(List<Bson> p) {
-                    if (pipeline != null && pipeline.size() > 0)
-                        p.addAll(pipeline);
-
-                    return mongoTemplate.getDb().watch(p, Document.class).batchSize(100).maxAwaitTime(300, TimeUnit.MILLISECONDS);
-                }
-
-            };
-        });
-    }
 
     @RequestMapping("/react-watch/{collection}")
-    public void reactiveWwatch(@PathVariable("collection") String collection) throws Exception {
+    public void reactiveWatch(@PathVariable("collection") String collection) throws Exception {
         reactiveChangeStreamService.run(collection);
     }
 }
