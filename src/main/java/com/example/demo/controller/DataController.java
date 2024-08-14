@@ -3,6 +3,7 @@ package com.example.demo.controller;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 
 import org.bson.BsonDateTime;
@@ -28,7 +29,7 @@ public class DataController {
     @Autowired
     private AsyncService service;
 
-	static StopWatch SW = new StopWatch();
+    static StopWatch SW = new StopWatch();
 
     @RequestMapping("/test/{collection}")
     public String test(@PathVariable("collection") String collectionString,
@@ -37,8 +38,11 @@ public class DataController {
             @RequestParam(required = false, defaultValue = "1000") int itemsPerThread) {
         {
             try {
+                Random rd = new Random();
+                byte[] dummyData = new byte[3000];
+                rd.nextBytes(dummyData);
+                Document d = new Document("test", new String(dummyData));
                 logger.info("test start");
-                Document d = new Document("test","test");
 
                 List<CompletableFuture<Void>> ends = new ArrayList<CompletableFuture<Void>>();
                 StopWatch sw = new StopWatch();
@@ -48,7 +52,7 @@ public class DataController {
                 mongoTemplate.getCollection(collectionString).insertOne(doc);
                 sw.start();
                 for (int i = 1; i <= threads; i++) {
-                    if(batch)
+                    if (batch)
                         ends.add(service.insert(itemsPerThread, i, collectionString, d));
                     else
                         ends.add(service.insertOne(itemsPerThread, i, collectionString, d));
@@ -65,7 +69,8 @@ public class DataController {
                 sb.append("test() takes ");
                 sb.append(sw.getTotalTimeSeconds());
                 sb.append("s");
-                logger.info("test end. " + sb.toString()+ ", TPS:"+(threads*itemsPerThread)/sw.getTotalTimeSeconds());
+                logger.info("test end. " + sb.toString() + ", TPS:"
+                        + (threads * itemsPerThread) / sw.getTotalTimeSeconds());
                 return sb.toString();
             } catch (Exception ex) {
                 return ex.toString();

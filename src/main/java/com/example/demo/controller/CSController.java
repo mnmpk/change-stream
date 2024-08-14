@@ -24,6 +24,7 @@ import com.example.demo.model.ChangeStreamProcess;
 import com.example.demo.model.ChangeStreamProcessConfig;
 import com.example.demo.service.ChangeStreamService;
 import com.example.demo.service.ReactiveChangeStreamService;
+import com.mongodb.ServerCursor;
 import com.mongodb.client.ChangeStreamIterable;
 import com.mongodb.client.MongoChangeStreamCursor;
 import com.mongodb.client.MongoCollection;
@@ -34,6 +35,7 @@ import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Sorts;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
 import com.mongodb.client.model.changestream.FullDocument;
+import com.mongodb.internal.operation.AggregateResponseBatchCursor;
 
 @RestController
 public class CSController {
@@ -336,5 +338,20 @@ public class CSController {
     @RequestMapping("/react-watch/{collection}")
     public void reactiveWatch(@PathVariable("collection") String collection) throws Exception {
         reactiveChangeStreamService.run(collection);
+    }
+
+    @RequestMapping("/testCS/{collection}")
+    public void test(@PathVariable("collection") String collection) throws Exception {
+        ChangeStreamIterable<Document> i = mongoTemplate.getDb().getCollection(collection)
+                .watch().batchSize(10).maxAwaitTime(1000, TimeUnit.MILLISECONDS);
+        MongoChangeStreamCursor<ChangeStreamDocument<Document>> cursor = i.cursor();
+        while (true) {
+            ChangeStreamDocument<Document> csd = cursor.tryNext();
+            if (csd != null) {
+                logger.info(csd.toString());
+            }
+            if (cursor.getResumeToken() != null)
+                logger.info(cursor.getResumeToken().getString("_data").getValue());
+        }
     }
 }
