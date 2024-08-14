@@ -39,7 +39,7 @@ public class DataController {
         {
             try {
                 Random rd = new Random();
-                byte[] dummyData = new byte[3000];
+                byte[] dummyData = new byte[4000];
                 rd.nextBytes(dummyData);
                 Document d = new Document("test", new String(dummyData));
                 logger.info("test start");
