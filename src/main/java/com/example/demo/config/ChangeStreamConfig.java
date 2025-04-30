@@ -3,7 +3,6 @@ package com.example.demo.config;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-
 import org.bson.BsonDocument;
 import org.bson.BsonString;
 import org.bson.Document;
@@ -71,8 +70,7 @@ public class ChangeStreamConfig {
     @Retryable(include = ChangeStreamException.class, maxAttempts = 3, backoff = @Backoff(delay = 1000))
     private void start() {
         ChangeStreamIterable<Document> changeStream = mongoTemplate.getDb().watch(List.of(Aggregates.match(
-                Filters.in("ns.coll", List.of(COLL_CUSTOMER, COLL_POLICY))
-        ))).fullDocument(FullDocument.UPDATE_LOOKUP);
+                Filters.in("ns.coll", List.of(COLL_CUSTOMER, COLL_POLICY))))).fullDocument(FullDocument.UPDATE_LOOKUP);
         if (resumeTokenString != null) {
             BsonDocument resumeToken = new BsonDocument();
             resumeToken.put("_data", new BsonString(resumeTokenString));
@@ -84,9 +82,10 @@ public class ChangeStreamConfig {
             if (OperationType.INVALIDATE == e.getOperationType()) {
                 throw new ChangeStreamException();
             } else {
-//TODO: pre-calculatiuon for agent view
+                // TODO: pre-calculatiuon for agent view
                 try {
-                    MongoCollection<Searchable> c = mongoTemplate.getDb().withCodecRegistry(codecRegistry).getCollection(COLL_SEARCH, Searchable.class);
+                    MongoCollection<Searchable> c = mongoTemplate.getDb().withCodecRegistry(codecRegistry)
+                            .getCollection(COLL_SEARCH, Searchable.class);
                     Searchable searchable = new Searchable();
                     searchable.setId(e.getDocumentKey().getObjectId("_id").getValue());
                     switch (e.getOperationType()) {
@@ -96,16 +95,23 @@ public class ChangeStreamConfig {
                             switch (e.getNamespace().getCollectionName()) {
                                 case COLL_CUSTOMER:
                                     searchable.setType(SearchableType.CUSTOMER);
-                                    Customer customer = codecRegistry.get(Customer.class).decode(e.getFullDocument().toBsonDocument().asBsonReader(), DecoderContext.builder().build());
+                                    Customer customer = codecRegistry.get(Customer.class).decode(
+                                            e.getFullDocument().toBsonDocument().asBsonReader(),
+                                            DecoderContext.builder().build());
                                     searchable.setName(customer.getName());
                                     break;
                                 case COLL_POLICY:
                                     searchable.setType(SearchableType.POLICY);
-                                    Policy p = codecRegistry.get(Policy.class).decode(e.getFullDocument().toBsonDocument().asBsonReader(), DecoderContext.builder().build());
-                                    searchable.setName(Name.builder().en(findLangValue(p.getName(), "en")).zhhk(findLangValue(p.getName(), "zh-hk")).zhcn(findLangValue(p.getName(), "zh-cn")).build());
+                                    Policy p = codecRegistry.get(Policy.class).decode(
+                                            e.getFullDocument().toBsonDocument().asBsonReader(),
+                                            DecoderContext.builder().build());
+                                    searchable.setName(Name.builder().en(findLangValue(p.getName(), "en"))
+                                            .zhhk(findLangValue(p.getName(), "zh-hk"))
+                                            .zhcn(findLangValue(p.getName(), "zh-cn")).build());
                                     break;
                             }
-                            logger.info("save: " + c.replaceOne(Filters.eq("_id", searchable.getId()), searchable, new ReplaceOptions().upsert(true)));
+                            logger.info("save: " + c.replaceOne(Filters.eq("_id", searchable.getId()), searchable,
+                                    new ReplaceOptions().upsert(true)));
                             break;
                         case DELETE:
                             logger.info("delete: " + c.deleteOne(Filters.eq("_id", searchable.getId())));
@@ -121,7 +127,8 @@ public class ChangeStreamConfig {
     }
 
     private String findLangValue(List<Lang> ls, String langCode) {
-        return ls.stream().filter(l -> langCode.equalsIgnoreCase(l.getLang())).map(l -> l.getValue()).findFirst().orElse(null);
+        return ls.stream().filter(l -> langCode.equalsIgnoreCase(l.getLang())).map(l -> l.getValue()).findFirst()
+                .orElse(null);
     }
 
     @Recover
@@ -144,7 +151,7 @@ public class ChangeStreamConfig {
             if (OperationType.INVALIDATE == e.getOperationType()) {
                 throw new ChangeStreamException();
             } else {
-                //do nothing
+                // do nothing
             }
         });
     }
